@@ -1,0 +1,3 @@
+printZero
+incrementZero
+test3

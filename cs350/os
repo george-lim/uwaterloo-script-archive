@@ -1,0 +1,137 @@
+#!/bin/bash
+
+# Configuration.
+os161_dir=~/cs350-os161
+verbose_level=0 # 0 - only print errors, 1 - print everything.
+
+silence() {
+  if [ $verbose_level -eq 0 ]; then
+    $@ 1> /dev/null
+  else
+    $@
+  fi
+}
+
+config() {
+  if [[ $ASST != '' ]] && [[ $ASST != ASST$1 ]]; then
+    # Clean old kernel compile files.
+    cd ${os161_dir}/os161-1.99/kern/compile/$ASST
+    silence bmake distclean
+  fi
+  ASST=ASST$1
+  # Configure OS/161 and save ASST to file.
+  cd ${os161_dir}/os161-1.99/kern/conf/
+  silence ./config $ASST
+  echo $ASST > current
+  # Compile kernel dependencies.
+  cd ${os161_dir}/os161-1.99/kern/compile/$ASST
+  silence bmake depend
+}
+
+print_config() {
+  version=$(cat ${os161_dir}/os161-1.99/kern/compile/$ASST/version)
+  conf=$(cat ${os161_dir}/root/sys161.conf | sed -n '/#31[[:space:]]mainboard/!p' | tail -1 | sed 's/.*mainboard[[:space:]]//')
+  echo -e "asst=${ASST#ASST}\tbuild=${version}\t${conf}"
+}
+
+build() {
+  local OPTIND=2
+  while getopts :uv: opts; do
+    case $opts in
+      u)
+        # Compile user-level applications.
+        cd ${os161_dir}/os161-1.99
+        silence bmake
+        silence bmake install
+        ;;
+      v)
+        # Set build version.
+        version="$OPTARG"
+        if [[ $version =~ ^[0-9]+$ ]]; then
+          cd ${os161_dir}/os161-1.99/kern/compile/$ASST
+          silence bmake clean
+          echo $((version - 1)) > version
+        fi
+        ;;
+    esac
+  done
+  # Compile kernel.
+  cd ${os161_dir}/os161-1.99/kern/compile/$ASST
+  silence bmake
+  if [ $? -ne 0 ]; then
+    >&2 echo ""
+    return 1
+  fi
+  silence bmake install
+}
+
+build_and_run() {
+  local OPTIND=2
+  cd ${os161_dir}/root
+  while getopts :c:r: opts; do
+    case $opts in
+      c)
+        # Set CPU count.
+        cpus="$OPTARG"
+        if [[ $cpus =~ ^[0-9]+$ ]]; then
+          conf=$(sed -n '/#31[[:space:]]mainboard/!p' sys161.conf)
+          ram=$(echo $conf | tail -1 | sed 's/.*ramsize=//' | sed 's/[[:space:]]cpus=.*//')
+          echo -e "$(echo "$conf" | head -n-1)\n31\tmainboard\tramsize=${ram}\tcpus=${cpus}" > sys161.conf
+        fi
+        ;;
+      r)
+        # Set RAM size.
+        ram=$(echo "$OPTARG * 1024 * 1024 / 1" | bc)
+        if [[ $ram =~ ^[0-9]+$ ]]; then
+          conf=$(sed -n '/#31[[:space:]]mainboard/!p' sys161.conf)
+          cpus=$(echo $conf | tail -1 | sed 's/.*cpus=//')
+          echo -e "$(echo "$conf" | head -n-1)\n31\tmainboard\tramsize=${ram}\tcpus=${cpus}" > sys161.conf
+        fi
+        ;;
+    esac
+  done
+  # Build kernel.
+  silence build
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  # Run kernel.
+  shift $((OPTIND - 1))
+  if [[ "$1" != '' ]] && [ $verbose_level -eq 0 ]; then
+    # Ignore any lines that contain the following phrases.
+    ignore_phrases='/^$\|sys161:\|system version\|Copyright\|All rights reserved.\|physical memory available\|Device probe...\|lamebus\|ltimer\|lrandom\|lser\|MIPS r3000\|OS\/161 kernel:\|Shutting down.\|system is halted.\|: offline./!p'
+    (cd ${os161_dir}/root; sys161 kernel "${1};q" 2>&1 | sed -n "$ignore_phrases")
+  elif [[ "$1" != '' ]]; then
+    (cd ${os161_dir}/root; sys161 kernel "${1};q")
+  else
+    (cd ${os161_dir}/root; sys161 kernel)
+  fi
+  # Show current config.
+  print_config
+}
+
+submit() {
+  cd $os161_dir
+  silence rm os161kern.tgz 2> /dev/null
+  cs350_submit $1
+  silence rm os161kern.tgz
+}
+
+# Main.
+ASST=$(cat ${os161_dir}/os161-1.99/kern/conf/current 2> /dev/null)
+if [[ "$1" == config ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
+  config "$2"
+elif [[ "$1" == current ]] && [[ $ASST != '' ]]; then
+  print_config
+elif [[ "$1" == build ]] && [[ $ASST != '' ]]; then
+  build "$@"
+elif [[ "$1" == run ]] && [[ $ASST != '' ]]; then
+  build_and_run "$@"
+elif [[ "$1" = submit ]] && [ ${#} -eq 2 ]; then
+  submit "$2"
+else
+  echo "usage: os [config <ASST #> | current | build [-u] [-v <version #>] | run [-c <core #>] [-r <ram #>] [<command>] | submit <ASST #>]"
+  if [[ $ASST == '' ]]; then
+    echo "Please run 'os config <ASST #>' first before using any other command."
+  fi
+fi

@@ -1,0 +1,16 @@
+"printZero"
+read a 0
+print a
+
+"incrementZero"
+/a -l
+read a 0
+read b 1
+add c a b
+print c
+
+// Only 1 argument, no test alias.
+/a -d
+read a 1
+read a 0
+print a

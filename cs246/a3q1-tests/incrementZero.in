@@ -1,0 +1,4 @@
+read a 0
+read b 1
+add c a b
+print c

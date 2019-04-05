@@ -1,0 +1,121 @@
+#!/bin/bash
+if [ ${#} -ne 2 ] || ([ "$1" != '-s' ] && [ "$1" != '-p' ]); then
+  echo "usage: ./hexify [-s | -p] <input file path> > <output file path>"
+  echo "example: ./hexify -p input > output"
+  exit
+fi
+
+# If you choose to interpret file contents as a string literal.
+if [ "$1" == '-s' ]; then
+  # Convert entire file into hexadecimal, split by every 8 characters to get word.
+  words=$(echo $(xxd -pu <<< "$(cat $2)") | sed 's/.\{8\}/& /g')
+  for word in $words; do
+    # Add trailing zeroes to remaining word.
+    while [ ${#word} -lt 8 ]; do
+      word="${word}0"
+    done
+    # Write word to wordasm.
+    echo ".word 0x$word"
+  done
+  exit
+fi
+
+# Adds leading zeroes to $1 until it has reached a length of $2.
+addLeadingZeroes() {
+  str=$1
+  while [ ${#str} -lt "$2" ]; do
+    str="0$str"
+  done
+  echo $str
+}
+
+# Converts decimal $1 to a binary string of length $2.
+dec2bin() {
+  use2scomplement=false
+  decimal=$1
+  # Set 'use2scomplement' flag to true and strip '-' from negative values.
+  if [[ "$decimal" = '-'* ]]; then
+    decimal=${decimal#'-'}
+    use2scomplement=true
+  fi
+  binary=$(echo "obase=2;$decimal" | bc)
+  binary=$(addLeadingZeroes "$binary" "$2")
+  if [ "$use2scomplement" = true ]; then
+    # Flip all bits and add one to binary string.
+    binary=$(tr 01 10 <<< "$binary")
+    binary=$(echo "obase=2;ibase=2;$binary+1" | bc -l)
+  fi
+  echo $binary
+}
+
+# Converts binary string $1 to a hexadecimal word of length 8.
+bin2hex() {
+  word=$(echo "obase=16;ibase=2;$1" | bc)
+  word=$(addLeadingZeroes "$word" 8)
+  echo ".word 0x$word"
+}
+
+while IFS='' read -r line || [[ -n "$line" ]]; do
+  components=($line)
+  # Strip characters until every command argument is a decimal, then convert to binary.
+  for i in {1..3}; do
+    if [ "${components[i]}" == '' ]; then
+      break
+    fi
+    # Remove ',' after certain arguments.
+    components[$i]=${components[$i]%$','}
+    # Strip ')' from lw and sw commands, and split the offset and register values into separate components.
+    if [[ ${components[i]} = *')' ]]; then
+      components[$i]=${components[$i]%$')'}
+      subComponents=(${components[$i]//(/ })
+      components[$i]=${subComponents[0]}
+      components[$i+1]=${subComponents[1]}
+    fi
+    # Determine register or immediate value, and convert to binary.
+    if [[ ${components[i]} = '$'* ]]; then
+      components[$i]=${components[$i]#'$'}
+      components[$i]=$(dec2bin "${components[$i]}" 5)
+    else
+      components[$i]=$(dec2bin "${components[$i]}" 16)
+    fi
+  done
+  # Command interpreter.
+  cmd=${components[0]}
+  if [ "$cmd" == '.word' ]; then
+    echo $(bin2hex "${components[1]}")
+  elif [ "$cmd" == "add" ]; then
+    echo $(bin2hex "000000${components[2]}${components[3]}${components[1]}00000100000")
+  elif [ "$cmd" == "sub" ]; then
+    echo $(bin2hex "000000${components[2]}${components[3]}${components[1]}00000100010")
+  elif [ "$cmd" == "mult" ]; then
+    echo $(bin2hex "000000${components[1]}${components[2]}0000000000011000")
+  elif [ "$cmd" == "multu" ]; then
+    echo $(bin2hex "000000${components[1]}${components[2]}0000000000011001")
+  elif [ "$cmd" == "div" ]; then
+    echo $(bin2hex "000000${components[1]}${components[2]}0000000000011010")
+  elif [ "$cmd" == "divu" ]; then
+    echo $(bin2hex "000000${components[1]}${components[2]}0000000000011011")
+  elif [ "$cmd" == "mfhi" ]; then
+    echo $(bin2hex "0000000000000000${components[1]}00000010000")
+  elif [ "$cmd" == "mflo" ]; then
+    echo $(bin2hex "0000000000000000${components[1]}00000010010")
+  elif [ "$cmd" == "lis" ]; then
+    echo $(bin2hex "0000000000000000${components[1]}00000010100")
+  elif [ "$cmd" == "lw" ]; then
+    echo $(bin2hex "100011${components[3]}${components[1]}${components[2]}")
+  elif [ "$cmd" == "sw" ]; then
+    echo $(bin2hex "101011${components[3]}${components[1]}${components[2]}")
+  elif [ "$cmd" == "slt" ]; then
+    echo $(bin2hex "000000${components[2]}${components[3]}${components[1]}00000101010")
+  elif [ "$cmd" == "sltu" ]; then
+    echo $(bin2hex "000000${components[2]}${components[3]}${components[1]}00000101011")
+  elif [ "$cmd" == "beq" ]; then
+    echo $(bin2hex "000100${components[1]}${components[2]}${components[3]}")
+  elif [ "$cmd" == "bne" ]; then
+    echo $(bin2hex "000101${components[1]}${components[2]}${components[3]}")
+  elif [ "$cmd" == "jr" ]; then
+    echo $(bin2hex "000000${components[1]}000000000000000001000")
+  elif [ "$cmd" == "jalr" ]; then
+    echo $(bin2hex "000000${components[1]}000000000000000001001")
+  fi
+done < "$2"

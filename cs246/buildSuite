@@ -1,0 +1,57 @@
+#!/bin/bash
+
+if [ ${#} -ne 3 ]; then
+  echo "usage: ./buildSuite <test file path> <assignment #> <question #>"
+  echo "example: ./buildSuite a3q1.txt 3 1"
+  exit
+fi
+
+file="$1"
+assignment="$2"
+question="$3"
+
+counter=1
+newTest=1
+hasTestAlias=0
+project="a${assignment}q${question}-tests"
+
+if [ -e "${project}" ]; then
+  rm -r "${project}"
+fi
+
+mkdir "${project}"
+
+while IFS= read -r line
+do
+  if [ $hasTestAlias -eq 0 ]; then
+    testAlias="test${counter}"
+  fi
+
+  if [[ "${line}" == "//"* ]]; then
+    continue
+  elif [[ "${line}" == *"//"* ]]; then
+    line="${line%//*}"
+  fi
+
+  if [ "${line}" = "" ]; then
+    if [ $newTest -eq 0 ]; then
+      counter=$((counter+1))
+      newTest=1
+      hasTestAlias=0
+    fi
+  elif [[ "${line}" == \"* ]]; then
+      testAlias="${line%\"}"
+      testAlias="${testAlias#\"}"
+      hasTestAlias=1
+  elif [[ "${line}" == "/a "* ]]; then
+      echo "${line#/a }" >> "${project}/${testAlias}.args"
+      continue
+  else
+    if [ $newTest -eq 1 ]; then
+      echo "${testAlias}" >> "${project}/suiteq${question}.txt"
+      newTest=0
+    fi
+
+    echo "${line}" >> "${project}/${testAlias}.in"
+  fi
+done < "${file}"

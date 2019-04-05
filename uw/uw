@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Configuration.
+UW_SERVER='<USERNAME>@linux.student.cs.uwaterloo.ca' # Replace <USERNAME> with quest username.
+UW_HOME='<PATH>' # Replace <PATH> with path to home from Linux environment. Eg. '/u0/<USERNAME>'
+UW_MOUNT_DIR="$HOME/Desktop/UWaterloo" # Default: Linux environment is mounted to Desktop/UWaterloo.
+
+if [ ${#} -ne 1 ]; then
+  echo 'usage: uw [mount | umount | ssh]'
+  return
+fi
+
+if [ "$1" = 'mount' ]; then
+  mkdir $UW_MOUNT_DIR 2> /dev/null
+  sshfs $UW_SERVER:$UW_HOME $UW_MOUNT_DIR -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=2,volname=UWaterloo
+elif [ "$1" = 'umount' ]; then
+  umount $UW_SERVER:$UW_HOME
+  rmdir $UW_MOUNT_DIR 2> /dev/null
+elif [ "$1" = 'ssh' ]; then
+  ssh -Y $UW_SERVER
+else
+  echo "usage: uw [mount | umount | ssh]"
+fi
