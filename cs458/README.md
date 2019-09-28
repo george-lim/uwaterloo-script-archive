@@ -7,8 +7,10 @@ This project automates GDB breakpoint testing in sploit target programs to aid w
 1. [Usage](#usage)
 
 # Features/Commands
-`./sploit build sploit1` will simply call `gcc -Wall -ggdb sploit1.c -o sploit1`
+`./sploit build sploit1` will simply call `gcc -Wall -ggdb sploit1.c -o sploit1`.
+
 `./sploit gdb sploit1` will build and run `gdb` on sploit1, creating a breakpoint in the `main` function of sploit1's target program.
+
 `./sploit gdb sploit1 34 53` will build and run `gdb` on sploit1, creating breakpoints on line 34 and 53 in sploit1's target program.
 
 # Usage
