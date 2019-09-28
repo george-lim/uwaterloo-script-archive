@@ -1,7 +1,7 @@
 uw - Linux Environment Mounting & SSH Script
 ===============
 
-This guide is meant to help students set up a better Linux environment. It is written under the assumption that your system is OS X.
+This guide is meant to help students set up a better Linux environment. It is written under the assumption that your system is running macOS.
 
 1. [Benefits](#benefits)
 1. [Configuring uw](#configuring-uw)

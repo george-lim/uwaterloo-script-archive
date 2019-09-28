@@ -1,0 +1,37 @@
+#!/bin/sh
+
+# Configuration.
+gdbInput=${HOME}/.gdbInput # The file containing automatic GDB input.
+
+build() {
+  gcc -Wall -ggdb ${1}.c -o $1
+}
+
+debug() {
+  sploit=$1
+  build $1
+  echo -e "catch exec\nrun\nsymbol-file" $(cat ${sploit}.c | grep "#define TARGET " | sed -e "s/^#define TARGET //") > $gdbInput
+  if [ $# -gt 1 ]; then
+  	shift
+  	for breakpoint in $@; do
+  		echo b $breakpoint >> $gdbInput
+  	done
+  else
+  	echo b main >> $gdbInput
+  fi
+  echo c >> $gdbInput
+  gdb --command=$gdbInput $sploit
+}
+
+# Main.
+if [[ "$1" == build ]]; then
+  build "$2"
+elif [[ "$1" == gdb ]]; then
+  shift
+  debug $@
+else
+  echo "usage: sploit [build <sploit name> | gdb <sploit name>]"
+  echo "<sploit name> refers to the sploit.c source file, without the '.c' extension (ie. sploit-template)."
+  echo "Ensure this script and all sploit.c source files exist in the Ugster environment ~/uml/share directory."
+  echo "All sploit.c files are expected to have a '#define TARGET <target path>' line."
+fi
